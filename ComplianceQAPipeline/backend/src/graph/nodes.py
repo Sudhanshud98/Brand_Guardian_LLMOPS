@@ -18,7 +18,7 @@ logger = logging.getLogger("brand-guardian")
 logging.basicConfig(level = logging.INFO)
 
 # Node 1
-
+# Function responsible for converting video to text
 def index_video_node(state : VideoAuditState) -> Dict[str, any]:
     '''
     Download the youtube video from the URL
@@ -35,7 +35,7 @@ def index_video_node(state : VideoAuditState) -> Dict[str, any]:
     try:
         vi_service = VideoIndexerService()
 
-        # Download video
+        # Download video using yt-dlp
         if "youtube.com" in video_url or "youtu.be" in video_url:
             local_path = vi_service.download_youtube_video(video_url, output_path = local_filename)
         else:
@@ -48,10 +48,10 @@ def index_video_node(state : VideoAuditState) -> Dict[str, any]:
         if os.path.exists(local_path):
             os.remove(local_path)
 
-        raw_insights = vi_service.wait_for_processing(azure_video_id)
+        raw_insights = vi_service.wait_for_processing(azure_video_id) # this will pause the code and keep asking azure "are you done" every 30 seconds
 
         # Extract
-        clean_data = vi_service.extract_date(raw_insights)
+        clean_data = vi_service.extract_date(raw_insights) # this pulls the required data like transcripts, OCR data
         logger.info("---[NODE: Indexer] Extraction Complete---")
         return clean_data
     
@@ -64,8 +64,8 @@ def index_video_node(state : VideoAuditState) -> Dict[str, any]:
             "ocr_text" : []
         }
     
-# Node 2
-def audio_content_node(state : VideoAuditState) -> Dict[str, any]:
+# Node 2 - Helps AI to judge the content
+def audit_content_node(state : VideoAuditState) -> Dict[str, any]:
     '''
     Performs retrieval augmented generation to audit the content - brand video
     '''
@@ -112,18 +112,18 @@ def audio_content_node(state : VideoAuditState) -> Dict[str, any]:
             2. Identify ANY violations of the rules.
             3. Return strictly JSON in the following format:
                 {{
-                "compliance_results": [
-                {{
-                    "category": "Claim Validation",
-                    "severity": "CRITICAL",
-                    "description": "Explanation of the violation..."
-                }}
-            ],
-            "status": "FAIL",
-            "final_report": "Summary of findings..."
+            "compliance_results": [
+            {{
+                "category": "Claim Validation",
+                "severity": "CRITICAL",
+                "description": "Explanation of the violation..."
             }}
-            If no violations are found, set "status" to "PASS" and "compliance_results" to [].
-                """
+        ],
+        "status": "FAIL",
+        "final_report": "Summary of findings..."
+        }}
+        If no violations are found, set "status" to "PASS" and "compliance_results" to [].
+            """
     
     user_message = f"""
                 VIDEO_METADATA : {state.get('video_metadata', {})}
@@ -141,3 +141,17 @@ def audio_content_node(state : VideoAuditState) -> Dict[str, any]:
         if "```" in content:
             content = re.search(r"```(?:json)?(.?)```", content, re.DOTALL).group(1)
         audit_data = json.loads(content.strip())
+        return {
+            "compliance_results" : audit_data.get("compliance_result", []),
+            "final_status" : audit_data.get("status", "FAIL"),
+            "final_report" : audit_data.get("final_report", "No report generated")       
+        }
+    
+    except Exception as e:
+        logger.error(f"System error in Auditor Node : {str(e)}")
+        # Logging raw response
+        logger.error(f"Raw LLM response : {response.content if 'response' in locals() else 'None'}")
+        return {
+            "errors" : [str(e)],
+            "final_status" : "FAIL"
+        }
