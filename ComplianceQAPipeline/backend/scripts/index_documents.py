@@ -67,6 +67,7 @@ def index_docs():
 
     try:
         logger.ifo("Initializing Azure AI Search Vectore Store...")
+        index_name = os.getenv("AZURE_SEARCH_INDEX_NAME")
         embeddings = AzureOpenAIEmbeddings(
             azure_search_endpoint = os.getenv('AZURE_SEARCH_ENDPOINT'),
             azure_search_key = os.getenv("AZURE_SEARCH_API_KEY"),
@@ -122,5 +123,5 @@ def index_docs():
         else:
             logger.warning("No documents were precossed.")
 
-if (__name__) = (__main__):
+if __name__ == "__main__":
     index_docs()
