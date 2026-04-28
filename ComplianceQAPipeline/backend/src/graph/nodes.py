@@ -2,7 +2,7 @@ import json
 import os
 import logging
 import re
-from typing import Dict, Anly, List
+from typing import Dict, Any, List
 
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_community.vectorstores import AzureSearch
@@ -19,7 +19,7 @@ logging.basicConfig(level = logging.INFO)
 
 # Node 1
 # Function responsible for converting video to text
-def index_video_node(state : VideoAuditState) -> Dict[str, any]:
+def index_video_node(state : VideoAuditState) -> Dict[str, Any]:
     '''
     Download the youtube video from the URL
     Uploads to the azure video indexer
@@ -51,7 +51,7 @@ def index_video_node(state : VideoAuditState) -> Dict[str, any]:
         raw_insights = vi_service.wait_for_processing(azure_video_id) # this will pause the code and keep asking azure "are you done" every 30 seconds
 
         # Extract
-        clean_data = vi_service.extract_date(raw_insights) # this pulls the required data like transcripts, OCR data
+        clean_data = vi_service.extract_data(raw_insights) # this pulls the required data like transcripts, OCR data
         logger.info("---[NODE: Indexer] Extraction Complete---")
         return clean_data
     
@@ -65,7 +65,7 @@ def index_video_node(state : VideoAuditState) -> Dict[str, any]:
         }
     
 # Node 2 - Helps AI to judge the content
-def audit_content_node(state : VideoAuditState) -> Dict[str, any]:
+def audit_content_node(state : VideoAuditState) -> Dict[str, Any]:
     '''
     Performs retrieval augmented generation to audit the content - brand video
     '''
@@ -99,7 +99,7 @@ def audit_content_node(state : VideoAuditState) -> Dict[str, any]:
 
     # RAG retrieval
     ocr_text = state.get("ocr_text", [])
-    query_text = f"{transcript} {''.join(ocr_text)}"
+    query_text = f"{transcript} {' '.join(ocr_text)}"
     docs = vector_store.similarity_search(query_text, k=3)
     retrieved_rules = "\n\n".join([doc.page_content for doc in docs])
 
@@ -108,7 +108,7 @@ def audit_content_node(state : VideoAuditState) -> Dict[str, any]:
             OFFICIAL REGULATORY RULES:
             {retrieved_rules}
             INSTRUCTIONS:
-            1. Analyze the Transcript and OCT text below.
+            1. Analyze the Transcript and OCR text below.
             2. Identify ANY violations of the rules.
             3. Return strictly JSON in the following format:
                 {{
@@ -133,16 +133,16 @@ def audit_content_node(state : VideoAuditState) -> Dict[str, any]:
     
     try:
         response = llm.invoke([
-            SystemMessage(content = system_prompt)
+            SystemMessage(content = system_prompt),
             HumanMessage(content = user_message)
         ])
 
         content = response.content
         if "```" in content:
-            content = re.search(r"```(?:json)?(.?)```", content, re.DOTALL).group(1)
+            content = re.search(r"```(?:json)?(.*?)```", content, re.DOTALL).group(1)
         audit_data = json.loads(content.strip())
         return {
-            "compliance_results" : audit_data.get("compliance_result", []),
+            "compliance_results" : audit_data.get("compliance_results", []),
             "final_status" : audit_data.get("status", "FAIL"),
             "final_report" : audit_data.get("final_report", "No report generated")       
         }

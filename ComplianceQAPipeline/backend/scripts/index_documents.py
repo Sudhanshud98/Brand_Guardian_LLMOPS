@@ -49,12 +49,12 @@ def index_docs():
     # Initializing the embedding model
 
     try:
-        logger.ifo("Initializing Azure Open AI Embeddings...")
+        logger.info("Initializing Azure Open AI Embeddings...")
         embeddings = AzureOpenAIEmbeddings(
             azure_deployment = os.getenv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT', 'text-embedding-3-small'),
             azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"),
             api_key = os.getenv("AZURE_OPENAI_API_KEY"),
-            openai_api_version = os.getenv("AZURE_OPEN_API_VESION")
+            openai_api_version = os.getenv("AZURE_OPEN_API_VERSION", "2024-02-01")
         )
         logger.info("Embeddings model initialized successfully")
 
@@ -66,9 +66,9 @@ def index_docs():
     # Initialize te Azure Saearch
 
     try:
-        logger.ifo("Initializing Azure AI Search Vectore Store...")
+        logger.info("Initializing Azure AI Search Vectore Store...")
         index_name = os.getenv("AZURE_SEARCH_INDEX_NAME")
-        embeddings = AzureOpenAIEmbeddings(
+        vector_store = AzureSearch(
             azure_search_endpoint = os.getenv('AZURE_SEARCH_ENDPOINT'),
             azure_search_key = os.getenv("AZURE_SEARCH_API_KEY"),
             index_name = index_name,
@@ -85,6 +85,8 @@ def index_docs():
     pdf_files = glob.glob(os.path.join(data_folder, "*.pdf"))
     if not pdf_files:
         logger.warning(f"No PDF files found in {data_folder}. Please add files")
+        return
+    
     logger.info(f"Found {len(pdf_files)} PDFs to process : {[os.path.basename(f) for f in pdf_files]}")
 
     all_splits = []
@@ -109,19 +111,19 @@ def index_docs():
             logger.error(f" Failed to process {pdf_path} : {e}")
 
         # Upload to Azure
-        if all_splits:
-            logger.info(f"Uploading {len(all_splits)} chunks to Azure AI Search Index '{index_name}'")
-            try:
-                # Azure Search accepts batches automatically via this method
-                vector_store.add_documents(documents = all_splits)
-                logger.info("="*50)
-                logger.info("Indexing Complete! Knowledge Base is ready...")
-                logger.info(f"Total chnks indexed : {len(all_splits)}")
-            except Exception as e:
-                logger.error(f"Failed to upload the documents to Azure Search : {e}")
-                logger.error("Please check the Azure Search configuration and try again")
-        else:
-            logger.warning("No documents were precossed.")
+    if all_splits:
+        logger.info(f"Uploading {len(all_splits)} chunks to Azure AI Search Index '{index_name}'")
+        try:
+            # Azure Search accepts batches automatically via this method
+            vector_store.add_documents(documents = all_splits)
+            logger.info("="*50)
+            logger.info("Indexing Complete! Knowledge Base is ready...")
+            logger.info(f"Total chnks indexed : {len(all_splits)}")
+        except Exception as e:
+            logger.error(f"Failed to upload the documents to Azure Search : {e}")
+            logger.error("Please check the Azure Search configuration and try again")
+    else:
+        logger.warning("No documents were precossed.")
 
 if __name__ == "__main__":
     index_docs()

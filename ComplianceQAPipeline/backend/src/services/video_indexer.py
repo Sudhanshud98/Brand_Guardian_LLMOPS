@@ -14,7 +14,7 @@ class VideoIndexerService:
     def __init__(self):
         self.account_id = os.getenv("AZURE_VI_ACCOUNT_ID")
         self.location = os.getenv("AZURE_VI_LOCATION")
-        self.subsciption_id = os.getenv("AZURE_SUBSCRIPTION_ID")
+        self.subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
         self.resource_group= os.getenv("AZURE_RESOURCE_GROUP")
         self.vi_name = os.getenv("AZURE_VI_NAME", "brand-guardia-project-01")
         self.credential = DefaultAzureCredential()
@@ -40,27 +40,32 @@ class VideoIndexerService:
             f"/providers/Microsoft.VideoIndexer/accounts/{self.vi_name}"
             f"/generateAccessToken?api-version=2024-01-01"
         )
-        headers = {"Authorizaton" : f"Bearer {arm_access_token}"}
-        payload = {"PermissionType" : "Contributor", "Scope" : "Account"}
+        headers = {"Authorization" : f"Bearer {arm_access_token}"}
+        payload = {"permissionType" : "Contributor", "scope" : "Account"}
         response = requests.post(url, headers = headers, json = payload)
         if response.status_code != 200:
             raise Exception(f"Failed to get VI Account token : {response.text}")
-        return response.json().get("access")
+        return response.json().get("accessToken")
 
     # To download youtube video
     def download_youtube_video (self, url, output_path="temp_video.mp4"):
         '''
         Downloads the youtube video to a local file
         '''
-        logger.info(f"Downloading Youtube vide: {url}")
+        logger.info(f"Downloading Youtube video: {url}")
         
         ydl_opts = {
-            "format" : 'best[ext=mp4]',
-            'outtmpl': output_path,
-            'quiet' : True,
-            'overwrites': True
-        }
+        'format' : 'best',
+        'outtmpl' : output_path, # output template
+        'quiet' : False,
+        'no_warnings' : False,
 
+        #Add these options:
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+        'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+    }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -91,6 +96,8 @@ class VideoIndexerService:
         if response.status_code != 200:
             raise Exception(f"Azure upload failed : {response.text}")
         
+        return response.json().get("id")
+        
 
     def wait_for_processing(self, video_id):
         logger.info(f"Waiting for the video {video_id} to process...")
@@ -98,8 +105,8 @@ class VideoIndexerService:
             arm_token = self.get_access_token()
             vi_token = self.get_account_token(arm_token)
 
-            url = f"https://api.videoindexer.ai/{self.location}/Accounts/{self.account_id}/Videos"
-            params = {"access_token" : vi_token}
+            url = f"https://api.videoindexer.ai/{self.location}/Accounts/{self.account_id}/Videos/{video_id}/Index"
+            params = {"accessToken" : vi_token}
             response = requests.get(url, params = params)
             data = response.json()
 
@@ -114,7 +121,7 @@ class VideoIndexerService:
             time.sleep(30)
 
     def extract_data(self, vi_json):
-        'parses teh JSON into our state format'
+        '''parses the JSON into our state format'''
         transcript_lines = []
         for v in vi_json.get("videos", []):
             for insight in v.get("insights", {}).get("transcript", []):
@@ -129,7 +136,7 @@ class VideoIndexerService:
             "transcript": " ".join(transcript_lines),
             "ocr_text": ocr_lines,
             "video_metadata": {
-                "duration": vi_json.get("summarizedInsights", {}).get("duration"),
+                "duration": vi_json.get("summarizedInsights", {}).get("duration", {}).get("seconds"),
                 "platform": "youtube"
             }
         }

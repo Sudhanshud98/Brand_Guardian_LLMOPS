@@ -20,11 +20,11 @@ class VideoAuditState(TypedDict):
     transcript : Optional[str]
     ocr_text : List[str]
 
-    compliance_result : Annotated[List[ComplianceIssue], operator.add]
+    compliance_results : Annotated[List[ComplianceIssue], operator.add]
 
     # Final deliverabls
-    fianl_status : str
+    final_status : str
     final_report : str
 
     # System observability
-    errore : Annotated[List[str], operator.add]
+    errors : Annotated[List[str], operator.add]
