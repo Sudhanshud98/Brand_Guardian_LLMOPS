@@ -9,6 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.vectorstores import AzureSearch
+from openai import AzureOpenAI
 
 #setup logging
 logging.basicConfig(

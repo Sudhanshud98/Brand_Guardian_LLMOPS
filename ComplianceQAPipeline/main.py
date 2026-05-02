@@ -12,7 +12,7 @@ import logging
 from pprint import pprint
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 from backend.src.graph.workflow import app
 
